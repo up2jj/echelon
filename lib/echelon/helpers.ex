@@ -154,4 +154,31 @@ defmodule Echelon.Helpers do
   def eenabled? do
     Echelon.enabled?()
   end
+
+  @doc """
+  Groups related log entries with indentation and visual separators.
+
+  Convenience wrapper for `Echelon.group/2`.
+
+  ## Examples
+
+      egroup("database_transaction", fn ->
+        einfo("Starting transaction")
+        edebug("Executing queries", count: 3)
+        einfo("Transaction committed")
+      end)
+
+      # Nested groups
+      egroup("api_request", fn ->
+        einfo("Processing request")
+
+        egroup("validation", fn ->
+          edebug("Validating input")
+        end)
+      end)
+  """
+  @spec egroup(String.t(), (() -> result)) :: result when result: any()
+  def egroup(name, func) do
+    Echelon.group(name, func)
+  end
 end

@@ -21,8 +21,64 @@ defmodule Echelon.Console.TerminalDisplay do
   Displays a log entry in the terminal with color formatting.
 
   Supports both keyword list and map metadata.
+  Handles group markers for visual grouping of related entries.
   """
   def show(entry) do
+    case entry[:group_marker] do
+      :start -> show_group_start(entry)
+      :end -> show_group_end(entry)
+      nil -> show_regular_entry(entry)
+    end
+  end
+
+  ## Private Functions
+
+  # Show group start separator
+  defp show_group_start(entry) do
+    name = entry[:group_name] || "unnamed"
+    depth = entry[:group_depth] || 0
+    indent = String.duplicate("  ", max(0, depth - 1))
+
+    separator = IO.ANSI.format([
+      indent,
+      :magenta,
+      IO.ANSI.bright(),
+      "▶ ",
+      :cyan,
+      name,
+      :magenta,
+      " ▶",
+      IO.ANSI.reset()
+    ])
+
+    IO.puts(separator)
+    :ok
+  end
+
+  # Show group end separator
+  defp show_group_end(entry) do
+    name = entry[:group_name] || "unnamed"
+    depth = entry[:group_depth] || 0
+    indent = String.duplicate("  ", max(0, depth - 1))
+
+    separator = IO.ANSI.format([
+      indent,
+      :magenta,
+      IO.ANSI.bright(),
+      "◀ ",
+      :cyan,
+      name,
+      :magenta,
+      " ◀",
+      IO.ANSI.reset()
+    ])
+
+    IO.puts(separator)
+    :ok
+  end
+
+  # Show regular log entry (with indentation support)
+  defp show_regular_entry(entry) do
     timestamp = format_timestamp(entry.timestamp)
     level = entry.level || :info
     level_str = format_level(level)
@@ -30,8 +86,13 @@ defmodule Echelon.Console.TerminalDisplay do
     message = entry.message || ""
     metadata = entry.metadata || []
 
-    # Build the main log line
+    # Calculate indentation based on group depth
+    depth = entry[:group_depth] || 0
+    indent = String.duplicate("  ", depth)
+
+    # Build the main log line with indentation
     main_line = [
+      indent,
       IO.ANSI.format([
         :faint,
         "[#{timestamp}] "
@@ -50,9 +111,9 @@ defmodule Echelon.Console.TerminalDisplay do
 
     IO.puts(main_line)
 
-    # Display metadata if present
+    # Display metadata if present (with extra indentation)
     if has_metadata?(metadata) do
-      format_metadata(metadata)
+      format_metadata(metadata, indent)
       |> IO.puts()
     end
 
@@ -95,10 +156,10 @@ defmodule Echelon.Console.TerminalDisplay do
   defp has_metadata?(metadata) when is_map(metadata), do: map_size(metadata) > 0
   defp has_metadata?(_), do: true
 
-  defp format_metadata(metadata) do
+  defp format_metadata(metadata, base_indent) do
     metadata
     |> Enum.map(fn {key, value} ->
-      "  #{key}: #{inspect(value, pretty: true, width: 80)}"
+      "#{base_indent}  #{key}: #{inspect(value, pretty: true, width: 80)}"
     end)
     |> Enum.join("\n")
     |> then(fn str ->

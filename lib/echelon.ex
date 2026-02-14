@@ -206,10 +206,96 @@ defmodule Echelon do
     Echelon.Client.enabled?()
   end
 
+  @doc """
+  Groups related log entries with indentation and visual separators.
+
+  All log entries within the function will be indented and surrounded by
+  separator lines showing the group name.
+
+  Groups can be nested, with each level adding indentation.
+
+  ## Examples
+
+      Echelon.group("database_transaction", fn ->
+        Echelon.info("Starting transaction")
+        Echelon.debug("Executing queries", count: 3)
+        Echelon.info("Transaction committed")
+      end)
+
+      # Nested groups
+      Echelon.group("outer", fn ->
+        Echelon.info("Outer operation")
+
+        Echelon.group("inner", fn ->
+          Echelon.debug("Inner details")
+        end)
+      end)
+
+  The function's return value is preserved:
+
+      result = Echelon.group("computation", fn ->
+        Echelon.debug("Computing...")
+        42
+      end)
+      # result == 42
+
+  ## Error Handling
+
+  If the function raises an exception, the group will be properly closed
+  before re-raising:
+
+      Echelon.group("failing_operation", fn ->
+        Echelon.info("About to fail")
+        raise "error"
+      end)
+      # Group end marker is sent before exception propagates
+
+  """
+  @spec group(String.t(), (() -> result)) :: result when result: any()
+  def group(name, func) when is_binary(name) and is_function(func, 0) do
+    # Get current stack
+    stack = Process.get(:echelon_group_stack, [])
+
+    # Push new group
+    new_stack = stack ++ [name]
+    Process.put(:echelon_group_stack, new_stack)
+
+    # Send start marker
+    send_group_marker(name, :start, new_stack)
+
+    # Execute function with error handling
+    try do
+      result = func.()
+
+      # Send end marker on success
+      send_group_marker(name, :end, new_stack)
+
+      # Pop group
+      Process.put(:echelon_group_stack, stack)
+
+      result
+    rescue
+      exception ->
+        # Send end marker on error
+        send_group_marker(name, :end, new_stack)
+
+        # Pop group
+        Process.put(:echelon_group_stack, stack)
+
+        # Re-raise
+        reraise exception, __STACKTRACE__
+    end
+  end
+
   # Private implementation
   defp log(level, message, metadata) do
     # Evaluate lazy messages
     message = if is_function(message, 0), do: message.(), else: message
+
+    # Get current group state
+    stack = Process.get(:echelon_group_stack, [])
+    group_depth = length(stack)
+    group_name = List.last(stack)
 
     # Build log entry
     entry = %{
@@ -219,10 +305,33 @@ defmodule Echelon do
       timestamp: System.system_time(:microsecond),
       node: node(),
       pid: self(),
-      app: get_app()
+      app: get_app(),
+      group_depth: group_depth,
+      group_name: group_name,
+      group_marker: nil
     }
 
     # Send to client
+    Echelon.Client.send_log(entry)
+  end
+
+  # Send a group marker entry (start or end)
+  defp send_group_marker(name, marker_type, stack) do
+    depth = length(stack)
+
+    entry = %{
+      level: :info,
+      message: "",
+      metadata: [],
+      timestamp: System.system_time(:microsecond),
+      node: node(),
+      pid: self(),
+      app: get_app(),
+      group_depth: depth,
+      group_name: name,
+      group_marker: marker_type
+    }
+
     Echelon.Client.send_log(entry)
   end
 

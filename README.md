@@ -82,6 +82,78 @@ Echelon.debug(fn -> "Expensive: #{inspect(large_data_structure)}" end)
 
 The function is only evaluated if the console is connected.
 
+### Grouping Related Logs
+
+Group related log entries with indentation and visual separators:
+
+```elixir
+Echelon.group("database_transaction", fn ->
+  Echelon.info("Starting transaction")
+  Echelon.debug("Executing query", sql: "INSERT INTO users...")
+  Echelon.info("Transaction committed")
+end)
+```
+
+**Output:**
+```
+▶ database_transaction ▶
+  [15:32:01.234] INFO  my_app Starting transaction
+  [15:32:01.235] DEBUG my_app Executing query
+    sql: "INSERT INTO users..."
+  [15:32:01.236] INFO  my_app Transaction committed
+◀ database_transaction ◀
+```
+
+Group markers appear in **bright magenta** with **cyan** group names for high visibility.
+
+**Nested groups** create visual hierarchy:
+
+```elixir
+Echelon.group("api_request", fn ->
+  Echelon.info("Received request", endpoint: "/api/users")
+
+  Echelon.group("validation", fn ->
+    Echelon.debug("Validating input")
+    Echelon.debug("Validation passed")
+  end)
+
+  Echelon.group("database", fn ->
+    Echelon.info("Inserting user record")
+  end)
+
+  Echelon.info("Response sent", status: 201)
+end)
+```
+
+**Output:**
+```
+▶ api_request ▶
+  [15:32:01.234] INFO  my_app Received request
+    endpoint: "/api/users"
+  ▶ validation ▶
+    [15:32:01.235] DEBUG my_app Validating input
+    [15:32:01.236] DEBUG my_app Validation passed
+  ◀ validation ◀
+  ▶ database ▶
+    [15:32:01.237] INFO  my_app Inserting user record
+  ◀ database ◀
+  [15:32:01.238] INFO  my_app Response sent
+    status: 201
+◀ api_request ◀
+```
+
+The function's **return value is preserved**:
+
+```elixir
+result = Echelon.group("computation", fn ->
+  Echelon.debug("Computing...")
+  42
+end)
+# result == 42
+```
+
+If an exception occurs, the group is properly closed before the exception propagates.
+
 ### Running the Console
 
 **Using IEx (recommended):**

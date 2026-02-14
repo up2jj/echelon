@@ -109,4 +109,162 @@ defmodule EchelonTest do
       assert Application.get_env(:echelon, :enabled) == true
     end
   end
+
+  describe "group/2" do
+    test "returns function result" do
+      result = Echelon.group("test", fn -> 42 end)
+      assert result == 42
+    end
+
+    test "returns :ok for successful group with logs" do
+      assert Echelon.group("transaction", fn ->
+        Echelon.info("step 1")
+        Echelon.debug("step 2")
+        :ok
+      end) == :ok
+    end
+
+    test "preserves string return values" do
+      result = Echelon.group("test", fn -> "hello" end)
+      assert result == "hello"
+    end
+
+    test "preserves map return values" do
+      result = Echelon.group("test", fn -> %{status: :ok, data: 123} end)
+      assert result == %{status: :ok, data: 123}
+    end
+
+    test "nested groups work correctly" do
+      result = Echelon.group("outer", fn ->
+        Echelon.info("outer message")
+
+        inner_result = Echelon.group("inner", fn ->
+          Echelon.debug("inner message")
+          :inner_result
+        end)
+
+        assert inner_result == :inner_result
+        :outer_result
+      end)
+
+      assert result == :outer_result
+    end
+
+    test "deeply nested groups (3 levels)" do
+      result = Echelon.group("level1", fn ->
+        Echelon.group("level2", fn ->
+          Echelon.group("level3", fn ->
+            Echelon.info("deeply nested")
+            :deep
+          end)
+        end)
+      end)
+
+      assert result == :deep
+    end
+
+    test "cleans up stack on error" do
+      # Ensure group stack is empty before test
+      Process.delete(:echelon_group_stack)
+
+      assert_raise RuntimeError, "test error", fn ->
+        Echelon.group("failing", fn ->
+          Echelon.info("before error")
+          raise "test error"
+        end)
+      end
+
+      # Verify stack was cleaned up
+      assert Process.get(:echelon_group_stack, []) == []
+    end
+
+    test "cleans up stack on nested group error" do
+      Process.delete(:echelon_group_stack)
+
+      assert_raise RuntimeError, "nested error", fn ->
+        Echelon.group("outer", fn ->
+          Echelon.info("outer message")
+
+          Echelon.group("inner", fn ->
+            Echelon.info("about to fail")
+            raise "nested error"
+          end)
+        end)
+      end
+
+      # Verify stack was cleaned up
+      assert Process.get(:echelon_group_stack, []) == []
+    end
+
+    test "group state doesn't leak between processes" do
+      parent = self()
+
+      # Start group in parent
+      Echelon.group("parent_group", fn ->
+        Echelon.info("in parent")
+
+        # Spawn child process
+        Task.async(fn ->
+          # Child should have empty group stack
+          stack = Process.get(:echelon_group_stack, [])
+          send(parent, {:child_stack, stack})
+
+          Echelon.info("child message")
+        end)
+        |> Task.await()
+
+        # Parent should still have group
+        parent_stack = Process.get(:echelon_group_stack, [])
+        send(parent, {:parent_stack, parent_stack})
+      end)
+
+      assert_receive {:child_stack, []}
+      assert_receive {:parent_stack, ["parent_group"]}
+    end
+
+    test "multiple sequential groups work" do
+      result1 = Echelon.group("group1", fn ->
+        Echelon.info("in group1")
+        :result1
+      end)
+
+      # Stack should be clean between groups
+      assert Process.get(:echelon_group_stack, []) == []
+
+      result2 = Echelon.group("group2", fn ->
+        Echelon.info("in group2")
+        :result2
+      end)
+
+      # Stack should be clean after all groups
+      assert Process.get(:echelon_group_stack, []) == []
+
+      assert result1 == :result1
+      assert result2 == :result2
+    end
+
+    test "empty group works" do
+      result = Echelon.group("empty", fn -> nil end)
+      assert result == nil
+      assert Process.get(:echelon_group_stack, []) == []
+    end
+
+    test "group with only metadata logs" do
+      result = Echelon.group("metadata_test", fn ->
+        Echelon.info("test", %{key: "value", count: 42})
+        :done
+      end)
+
+      assert result == :done
+    end
+
+    test "group preserves lazy message evaluation" do
+      result = Echelon.group("lazy_test", fn ->
+        Echelon.debug(fn -> "lazy message" end)
+        :lazy_done
+      end)
+
+      assert result == :lazy_done
+    end
+  end
 end
