@@ -61,6 +61,38 @@ defmodule Echelon do
       config :echelon,
         enabled: false  # Start with logging disabled
 
+  ## File Logging
+
+  Save log entries to a file while maintaining terminal output:
+
+      # Enable with auto-detected filename (based on git branch)
+      Echelon.file()
+      #=> Creates echelon_main.log (if on 'main' branch)
+
+      # Enable with specific file path
+      Echelon.file("/tmp/my_app.log")
+
+      # Disable file logging
+      Echelon.file(false)
+
+      # Check current file path
+      Echelon.file_path()
+      #=> "/tmp/my_app.log"
+
+  Files are automatically rotated when they exceed 10,000 entries or 10MB.
+  Up to 5 backup files are kept (.1, .2, .3, .4, .5).
+
+  Configure file logging in `config/config.exs`:
+
+      config :echelon,
+        file: [
+          enabled: false,           # Global default
+          path: nil,                # nil = auto-detect from git
+          max_entries: 10_000,      # Rotate after N entries
+          max_bytes: 10_485_760,    # Rotate after 10MB
+          max_backups: 5            # Keep 5 backup files
+        ]
+
   ## Configuration (Optional)
 
   Configure fallback behavior in `config/config.exs`:
@@ -204,6 +236,142 @@ defmodule Echelon do
   @spec enabled?() :: boolean()
   def enabled? do
     Echelon.Client.enabled?()
+  end
+
+  @doc """
+  Enables file logging with an automatically detected filename.
+
+  The filename is generated based on the current git branch name (if available)
+  or the node name as a fallback. Files are created in the current working directory.
+
+  ## Examples
+
+      # On git branch "main"
+      Echelon.file()
+      #=> :ok
+      # Creates: echelon_main.log
+
+      # On git branch "feature/user-auth"
+      Echelon.file()
+      #=> :ok
+      # Creates: echelon_feature_user_auth.log
+
+      # When git is not available
+      Echelon.file()
+      #=> :ok
+      # Creates: echelon_<node_name>.log
+
+  After enabling file logging, all subsequent log entries will be written to both
+  the terminal and the file.
+
+  ## File Rotation
+
+  Files are automatically rotated when they exceed 10,000 entries or 10MB in size.
+  Up to 5 backup files are kept (.1, .2, .3, .4, .5).
+
+  """
+  @spec file() :: :ok | {:error, term()}
+  def file do
+    path = Echelon.FileConfig.deduce_file_path()
+    file(path)
+  end
+
+  @doc """
+  Enables or disables file logging with control over the file path.
+
+  ## Arguments
+
+  - `path` - A string path to the log file, `nil` to auto-detect, or `false` to disable
+
+  ## Examples
+
+      # Enable with explicit path
+      Echelon.file("/tmp/my_app.log")
+      #=> :ok
+
+      # Enable with auto-detection (same as Echelon.file())
+      Echelon.file(nil)
+      #=> :ok
+
+      # Disable file logging
+      Echelon.file(false)
+      #=> :ok
+
+      # Switch to a different file
+      Echelon.file("/var/log/app.log")
+      #=> :ok
+
+  ## Error Handling
+
+  If the file cannot be opened (due to permissions, invalid path, etc.),
+  an error is returned and file logging is disabled:
+
+      Echelon.file("/root/protected.log")
+      #=> {:error, :eacces}
+
+  If the Echelon console is not running, an error is returned:
+
+      Echelon.file("/tmp/app.log")
+      #=> {:error, :console_not_found}
+
+  Terminal output continues to work regardless of file logging status.
+
+  """
+  @spec file(String.t() | nil | false) :: :ok | {:error, term()}
+  def file(path_or_control)
+
+  def file(false) do
+    case :global.whereis_name(:echelon_console) do
+      :undefined ->
+        {:error, :console_not_found}
+
+      pid ->
+        GenServer.call(pid, :disable_file)
+    end
+  end
+
+  def file(nil) do
+    path = Echelon.FileConfig.deduce_file_path()
+    file(path)
+  end
+
+  def file(path) when is_binary(path) do
+    case :global.whereis_name(:echelon_console) do
+      :undefined ->
+        {:error, :console_not_found}
+
+      pid ->
+        GenServer.call(pid, {:configure_file, path})
+    end
+  end
+
+  @doc """
+  Returns the current log file path, or nil if file logging is disabled.
+
+  ## Examples
+
+      Echelon.file("/tmp/app.log")
+      Echelon.file_path()
+      #=> "/tmp/app.log"
+
+      Echelon.file(false)
+      Echelon.file_path()
+      #=> nil
+
+      # When console is not running
+      Echelon.file_path()
+      #=> nil
+
+  """
+  @spec file_path() :: String.t() | nil
+  def file_path do
+    case :global.whereis_name(:echelon_console) do
+      :undefined ->
+        nil
+
+      pid ->
+        GenServer.call(pid, :get_file_path)
+    end
   end
 
   @doc """
