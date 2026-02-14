@@ -8,15 +8,17 @@ defmodule Echelon.Console.Handlers.FileLogHandler do
 
   ## Configuration
 
-  Configure via Application environment:
+  Configure via handlers list in application environment:
 
       config :echelon,
-        file: [
-          enabled: false,           # Start disabled, enable via API
-          path: nil,                # File path (nil = not configured)
-          max_entries: 10_000,      # Rotate after N entries
-          max_bytes: 10_485_760,    # Rotate after 10MB
-          max_backups: 5            # Keep 5 backup files
+        handlers: [
+          {:file, Echelon.Console.Handlers.FileLogHandler, [
+            enabled: false,           # Start disabled, enable via API
+            path: nil,                # File path (nil = not configured)
+            max_entries: 10_000,      # Rotate after N entries
+            max_bytes: 10_485_760,    # Rotate after 10MB
+            max_backups: 5            # Keep 5 backup files
+          ]}
         ]
 
   ## State Structure
@@ -39,18 +41,16 @@ defmodule Echelon.Console.Handlers.FileLogHandler do
   require Logger
 
   @impl true
-  def init do
-    config = Application.get_env(:echelon, :file, [])
-
+  def init(opts \\ []) do
     %{
       enabled: false,
-      path: Keyword.get(config, :path),
+      path: Keyword.get(opts, :path),
       io_device: nil,
       entry_count: 0,
       byte_count: 0,
-      max_entries: Keyword.get(config, :max_entries, 10_000),
-      max_bytes: Keyword.get(config, :max_bytes, 10_485_760),
-      max_backups: Keyword.get(config, :max_backups, 5)
+      max_entries: Keyword.get(opts, :max_entries, 10_000),
+      max_bytes: Keyword.get(opts, :max_bytes, 10_485_760),
+      max_backups: Keyword.get(opts, :max_backups, 5)
     }
   end
 

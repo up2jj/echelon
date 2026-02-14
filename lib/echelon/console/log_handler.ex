@@ -16,8 +16,12 @@ defmodule Echelon.Console.LogHandler do
         @behaviour Echelon.Console.LogHandler
 
         @impl true
-        def init do
-          %{enabled: false, custom_state: nil}
+        def init(opts \\ []) do
+          %{
+            enabled: false,
+            custom_state: nil,
+            custom_option: Keyword.get(opts, :custom_option, "default")
+          }
         end
 
         @impl true
@@ -46,34 +50,45 @@ defmodule Echelon.Console.LogHandler do
 
   ## Registering a Handler
 
-  Handlers are registered in `Console.Server.init/1`:
+  Handlers are registered via application configuration:
 
-      handlers: %{
-        file: {FileLogHandler, FileLogHandler.init()},
-        custom: {MyApp.CustomHandler, MyApp.CustomHandler.init()}
-      }
+      config :echelon,
+        handlers: [
+          {:file, Echelon.Console.Handlers.FileLogHandler, [
+            enabled: true,
+            path: "logs/app.log",
+            max_entries: 10_000
+          ]},
+          {:custom, MyApp.CustomHandler, [
+            enabled: true,
+            custom_option: "value"
+          ]}
+        ]
 
   """
 
   @doc """
-  Called when the handler is first initialized.
+  Called when the handler is first initialized with configuration options.
 
-  Returns initial handler state based on application configuration.
+  Returns initial handler state based on the provided options.
   Should not perform side effects - use enable/1 for that.
+
+  ## Parameters
+
+    - `opts` - Keyword list of handler-specific configuration options
 
   ## Examples
 
-      def init do
-        config = Application.get_env(:echelon, :file, [])
+      def init(opts \\ []) do
         %{
-          enabled: Keyword.get(config, :enabled, false),
-          path: Keyword.get(config, :path),
-          # ... other config
+          enabled: false,
+          path: Keyword.get(opts, :path),
+          max_size: Keyword.get(opts, :max_size, 10_485_760)
         }
       end
 
   """
-  @callback init() :: handler_state :: map()
+  @callback init(opts :: keyword()) :: handler_state :: map()
 
   @doc """
   Called when the handler is enabled (either at startup or via API).

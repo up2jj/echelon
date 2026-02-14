@@ -234,6 +234,195 @@ When the console is unavailable:
 - **`:logger`** - Falls back to standard Logger
 - **`:silent`** - Drops logs silently
 
+## Custom Handlers
+
+Extend Echelon with custom log handlers for databases, metrics, external services, and more.
+
+### Configuration
+
+Register handlers via the `:handlers` configuration key:
+
+```elixir
+config :echelon,
+  handlers: [
+    # Built-in file handler
+    {:file, Echelon.Console.Handlers.FileLogHandler, [
+      enabled: true,
+      path: "logs/app.log",
+      max_entries: 10_000,
+      max_bytes: 10_485_760,  # 10MB
+      max_backups: 5
+    ]},
+
+    # Custom database handler
+    {:database, MyApp.DatabaseLogHandler, [
+      enabled: true,
+      connection: MyApp.Repo,
+      table: "logs"
+    ]},
+
+    # Custom metrics handler
+    {:metrics, MyApp.MetricsHandler, [
+      enabled: false,
+      endpoint: "https://metrics.example.com"
+    ]}
+  ]
+```
+
+**Handler Format:** Each handler is a `{name, module, opts}` tuple:
+- `name` - Atom identifying the handler (`:file`, `:database`, etc.)
+- `module` - Handler module implementing `Echelon.Console.LogHandler` behavior
+- `opts` - Keyword list of handler-specific configuration options
+
+**Note:** The file handler is always available (even if not explicitly configured) to support the `Echelon.file()` API. It starts disabled by default.
+
+### Creating a Custom Handler
+
+Implement the `Echelon.Console.LogHandler` behavior:
+
+```elixir
+defmodule MyApp.DatabaseLogHandler do
+  @behaviour Echelon.Console.LogHandler
+  require Logger
+
+  @impl true
+  def init(opts \\ []) do
+    %{
+      enabled: false,
+      repo: Keyword.get(opts, :repo),
+      table: Keyword.get(opts, :table, "logs")
+    }
+  end
+
+  @impl true
+  def enable(state) do
+    # Acquire resources (open connections, etc.)
+    {:ok, %{state | enabled: true}}
+  end
+
+  @impl true
+  def disable(state) do
+    # Release resources (close connections, etc.)
+    {:ok, %{state | enabled: false}}
+  end
+
+  @impl true
+  def handle_entry(entry, state) do
+    # Write log entry to database
+    attrs = %{
+      level: entry.level,
+      message: entry.message,
+      metadata: Jason.encode!(entry.metadata),
+      timestamp: DateTime.from_unix!(entry.timestamp, :microsecond)
+    }
+
+    case state.repo.insert({state.table, attrs}) do
+      {:ok, _} -> {:ok, state}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @impl true
+  def enabled?(state) do
+    state.enabled && state.repo != nil
+  end
+
+  @impl true
+  def terminate(state) do
+    # Optional: cleanup on server shutdown
+    :ok
+  end
+end
+```
+
+### Handler Lifecycle
+
+1. **Initialization** - `init/1` called with configuration options
+2. **Enabling** - `enable/1` called to acquire resources (if `enabled: true` in config)
+3. **Processing** - `handle_entry/2` called for each log when `enabled?/1` returns true
+4. **On Error** - If `handle_entry/2` returns error, handler is automatically disabled
+5. **Disabling** - `disable/1` called to release resources
+6. **Termination** - `terminate/1` called on server shutdown (optional)
+
+### Runtime Handler Management
+
+Control handlers dynamically at runtime:
+
+```elixir
+# List all handlers and their status
+Echelon.handlers()
+#=> %{
+#=>   file: %{module: Echelon.Console.Handlers.FileLogHandler, enabled: false},
+#=>   database: %{module: MyApp.DatabaseLogHandler, enabled: true}
+#=> }
+
+# Enable a handler
+Echelon.enable_handler(:metrics)
+#=> :ok
+
+# Disable a handler
+Echelon.disable_handler(:database)
+#=> :ok
+
+# File handler convenience methods (still work)
+Echelon.file("custom.log")  # Enable file handler with path
+Echelon.file(false)         # Disable file handler
+Echelon.file_path()         # Get current file path
+```
+
+### Log Entry Structure
+
+Handlers receive log entries with this structure:
+
+```elixir
+%{
+  level: :debug | :info | :warn | :error,
+  message: String.t(),
+  timestamp: integer(),              # microseconds since epoch
+  node: atom(),                      # e.g., :myapp@localhost
+  metadata: map() | keyword(),
+  group_marker: :start | :end | nil,
+  group_name: String.t() | nil,
+  group_depth: integer() | nil
+}
+```
+
+### Example Handlers
+
+**Simple File Counter:**
+```elixir
+defmodule MyApp.CounterHandler do
+  @behaviour Echelon.Console.LogHandler
+
+  @impl true
+  def init(opts \\ []) do
+    %{enabled: false, count: 0, path: Keyword.get(opts, :path)}
+  end
+
+  @impl true
+  def enable(state) do
+    {:ok, %{state | enabled: true}}
+  end
+
+  @impl true
+  def disable(state) do
+    # Write final count
+    if state.path do
+      File.write!(state.path, "Total logs: #{state.count}")
+    end
+    {:ok, %{state | enabled: false}}
+  end
+
+  @impl true
+  def handle_entry(_entry, state) do
+    {:ok, %{state | count: state.count + 1}}
+  end
+
+  @impl true
+  def enabled?(state), do: state.enabled
+end
+```
+
 ## Production Considerations
 
 ### Runtime Overhead

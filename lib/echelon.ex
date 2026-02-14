@@ -85,12 +85,14 @@ defmodule Echelon do
   Configure file logging in `config/config.exs`:
 
       config :echelon,
-        file: [
-          enabled: false,           # Global default
-          path: nil,                # nil = auto-detect from git
-          max_entries: 10_000,      # Rotate after N entries
-          max_bytes: 10_485_760,    # Rotate after 10MB
-          max_backups: 5            # Keep 5 backup files
+        handlers: [
+          {:file, Echelon.Console.Handlers.FileLogHandler, [
+            enabled: false,           # Start disabled, enable via API
+            path: nil,                # nil = auto-detect from git
+            max_entries: 10_000,      # Rotate after N entries
+            max_bytes: 10_485_760,    # Rotate after 10MB
+            max_backups: 5            # Keep 5 backup files
+          ]}
         ]
 
   ## Configuration (Optional)
@@ -371,6 +373,104 @@ defmodule Echelon do
 
       pid ->
         GenServer.call(pid, :get_file_path)
+    end
+  end
+
+  @doc """
+  Lists all registered handlers with their current status.
+
+  Returns a map of handler names to their status information, including
+  the handler module and whether it's currently enabled.
+
+  ## Examples
+
+      Echelon.handlers()
+      #=> %{
+      #=>   file: %{module: Echelon.Console.Handlers.FileLogHandler, enabled: false},
+      #=>   database: %{module: MyApp.DatabaseHandler, enabled: true}
+      #=> }
+
+      # When console is not running
+      Echelon.handlers()
+      #=> %{}
+
+  """
+  @spec handlers() :: %{atom() => %{module: module(), enabled: boolean()}}
+  def handlers do
+    case :global.whereis_name(:echelon_console) do
+      :undefined ->
+        %{}
+
+      pid ->
+        GenServer.call(pid, :list_handlers)
+    end
+  end
+
+  @doc """
+  Enables a specific handler at runtime.
+
+  The handler must already be registered in the configuration. This function
+  calls the handler's `enable/1` callback to acquire resources.
+
+  ## Arguments
+
+  - `name` - Atom identifying the handler (e.g., `:file`, `:database`)
+
+  ## Examples
+
+      Echelon.enable_handler(:database)
+      #=> :ok
+
+      Echelon.enable_handler(:nonexistent)
+      #=> {:error, :handler_not_found}
+
+      # When console is not running
+      Echelon.enable_handler(:file)
+      #=> {:error, :console_not_found}
+
+  """
+  @spec enable_handler(atom()) :: :ok | {:error, term()}
+  def enable_handler(name) when is_atom(name) do
+    case :global.whereis_name(:echelon_console) do
+      :undefined ->
+        {:error, :console_not_found}
+
+      pid ->
+        GenServer.call(pid, {:enable_handler, name})
+    end
+  end
+
+  @doc """
+  Disables a specific handler at runtime.
+
+  This calls the handler's `disable/1` callback to release resources.
+  The handler remains registered and can be re-enabled later.
+
+  ## Arguments
+
+  - `name` - Atom identifying the handler (e.g., `:file`, `:database`)
+
+  ## Examples
+
+      Echelon.disable_handler(:database)
+      #=> :ok
+
+      Echelon.disable_handler(:nonexistent)
+      #=> {:error, :handler_not_found}
+
+      # When console is not running
+      Echelon.disable_handler(:file)
+      #=> {:error, :console_not_found}
+
+  """
+  @spec disable_handler(atom()) :: :ok | {:error, term()}
+  def disable_handler(name) when is_atom(name) do
+    case :global.whereis_name(:echelon_console) do
+      :undefined ->
+        {:error, :console_not_found}
+
+      pid ->
+        GenServer.call(pid, {:disable_handler, name})
     end
   end
 

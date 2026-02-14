@@ -46,30 +46,14 @@ defmodule Echelon.Console.Server do
   def init(_opts) do
     display = Application.get_env(:echelon, :display, Echelon.Console.TerminalDisplay)
 
-    # Initialize file handler
-    file_handler_state = Echelon.Console.Handlers.FileLogHandler.init()
-
-    # Auto-enable if configured with a path
-    file_config = Application.get_env(:echelon, :file, [])
-    file_enabled = Keyword.get(file_config, :enabled, false)
-
-    file_handler_state =
-      if file_enabled and file_handler_state.path do
-        case Echelon.Console.Handlers.FileLogHandler.enable(file_handler_state) do
-          {:ok, enabled_state} -> enabled_state
-          {:error, _} -> %{file_handler_state | enabled: false}
-        end
-      else
-        file_handler_state
-      end
+    # Initialize all configured handlers
+    handlers = initialize_handlers()
 
     state = %{
       display: display,
       connected_nodes: MapSet.new(),
       log_count: 0,
-      handlers: %{
-        file: {Echelon.Console.Handlers.FileLogHandler, file_handler_state}
-      }
+      handlers: handlers
     }
 
     {:ok, state}
@@ -134,6 +118,48 @@ defmodule Echelon.Console.Server do
   end
 
   @impl true
+  def handle_call(:list_handlers, _from, state) do
+    result =
+      Enum.map(state.handlers, fn {name, {module, handler_state}} ->
+        {name, %{module: module, enabled: module.enabled?(handler_state)}}
+      end)
+      |> Map.new()
+
+    {:reply, result, state}
+  end
+
+  @impl true
+  def handle_call({:enable_handler, name}, _from, state) do
+    case Map.get(state.handlers, name) do
+      nil ->
+        {:reply, {:error, :handler_not_found}, state}
+
+      {module, handler_state} ->
+        case module.enable(handler_state) do
+          {:ok, enabled_state} ->
+            handlers = Map.put(state.handlers, name, {module, enabled_state})
+            {:reply, :ok, %{state | handlers: handlers}}
+
+          {:error, reason} ->
+            {:reply, {:error, reason}, state}
+        end
+    end
+  end
+
+  @impl true
+  def handle_call({:disable_handler, name}, _from, state) do
+    case Map.get(state.handlers, name) do
+      nil ->
+        {:reply, {:error, :handler_not_found}, state}
+
+      {module, handler_state} ->
+        {:ok, disabled_state} = module.disable(handler_state)
+        handlers = Map.put(state.handlers, name, {module, disabled_state})
+        {:reply, :ok, %{state | handlers: handlers}}
+    end
+  end
+
+  @impl true
   def handle_info(_msg, state) do
     {:noreply, state}
   end
@@ -150,6 +176,47 @@ defmodule Echelon.Console.Server do
     end)
 
     :ok
+  end
+
+  ## Private Functions - Handler Initialization
+
+  # Initialize all handlers from config
+  defp initialize_handlers do
+    # Get handlers from config
+    configured_handlers = Application.get_env(:echelon, :handlers, [])
+
+    # Ensure file handler is always present for Echelon.file() API
+    handlers_with_file = ensure_file_handler(configured_handlers)
+
+    # Initialize each handler
+    Enum.reduce(handlers_with_file, %{}, fn {name, module, opts}, acc ->
+      # Initialize handler with opts
+      handler_state = module.init(opts)
+
+      # Auto-enable if configured
+      handler_state =
+        if Keyword.get(opts, :enabled, false) do
+          case module.enable(handler_state) do
+            {:ok, enabled_state} -> enabled_state
+            {:error, _} -> handler_state
+          end
+        else
+          handler_state
+        end
+
+      Map.put(acc, name, {module, handler_state})
+    end)
+  end
+
+  # Ensure file handler is always present (disabled by default)
+  defp ensure_file_handler(handlers) do
+    # Check if file handler already configured
+    if Enum.any?(handlers, fn {name, _mod, _opts} -> name == :file end) do
+      handlers
+    else
+      # Add default file handler (disabled) to support Echelon.file() API
+      [{:file, Echelon.Console.Handlers.FileLogHandler, [enabled: false]} | handlers]
+    end
   end
 
   ## Private Functions - Handler Processing
