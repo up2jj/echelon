@@ -274,6 +274,8 @@ config :echelon,
 - `module` - Handler module implementing `Echelon.Console.LogHandler` behavior
 - `opts` - Keyword list of handler-specific configuration options
 
+**Important:** Custom handler modules must be available on the console side (where `Echelon.Console.Server` runs). In distributed systems, handler code must be compiled and loaded on the node running the console, not just on client nodes sending logs.
+
 **Note:** The file handler is always available (even if not explicitly configured) to support the `Echelon.file()` API. It starts disabled by default.
 
 ### Creating a Custom Handler

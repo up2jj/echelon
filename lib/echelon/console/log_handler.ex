@@ -65,6 +65,10 @@ defmodule Echelon.Console.LogHandler do
           ]}
         ]
 
+  **Important:** Handler modules must be available where the console server runs.
+  In distributed systems, ensure handler code is compiled and loaded on the node
+  running `Echelon.Console.Server`.
+
   """
 
   @doc """
