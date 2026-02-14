@@ -178,6 +178,58 @@ defmodule Echelon do
   end
 
   @doc """
+  Sends a ping signal to the console to verify connectivity.
+
+  Returns `:ok` immediately. The console will display:
+  - "pong" if the console is connected and healthy
+  - "pang" if the console is disconnected or has errors
+
+  Useful for verifying the Echelon logging system is working during development.
+
+  ## Examples
+
+      Echelon.ping()
+      #=> :ok
+      # Console displays: "pong" (if connected) or "pang" (if disconnected)
+
+      # Within groups - respects indentation
+      Echelon.group("operation", fn ->
+        Echelon.ping()
+      end)
+
+  """
+  @spec ping() :: :ok
+  def ping do
+    send_marker(:ping, "ping")
+  end
+
+  @doc """
+  Adds a horizontal rule separator to the log output.
+
+  Inserts a visual separator (---) that respects the current group
+  indentation level. Useful for organizing related log sections.
+
+  ## Examples
+
+      Echelon.info("Phase 1 starting")
+      Echelon.debug("Processing...")
+      Echelon.hr()
+      Echelon.info("Phase 2 starting")
+
+      # Within groups - respects indentation
+      Echelon.group("operation", fn ->
+        Echelon.info("Step 1")
+        Echelon.hr()
+        Echelon.info("Step 2")
+      end)
+
+  """
+  @spec hr() :: :ok
+  def hr do
+    send_marker(:hr, "")
+  end
+
+  @doc """
   Enables Echelon logging.
 
   When enabled, log entries will be sent to the Echelon console (if connected)
@@ -581,6 +633,36 @@ defmodule Echelon do
         group_depth: group_depth,
         group_name: group_name,
         group_marker: nil
+      }
+
+      # Send to client
+      Echelon.Client.send_log(entry)
+    end
+  end
+
+  # Send a marker entry (ping, hr, etc.)
+  defp send_marker(marker, message) do
+    # Early return if logging is disabled
+    unless Application.get_env(:echelon, :enabled, true) do
+      :ok
+    else
+      # Get current group state
+      stack = Process.get(:echelon_group_stack, [])
+      group_depth = length(stack)
+      group_name = List.last(stack)
+
+      # Build marker entry
+      entry = %{
+        level: :info,
+        message: message,
+        metadata: [],
+        timestamp: System.system_time(:microsecond),
+        node: node(),
+        pid: self(),
+        app: get_app(),
+        group_depth: group_depth,
+        group_name: group_name,
+        group_marker: marker
       }
 
       # Send to client

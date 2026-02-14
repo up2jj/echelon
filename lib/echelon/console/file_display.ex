@@ -31,6 +31,8 @@ defmodule Echelon.Console.FileDisplay do
     case entry[:group_marker] do
       :start -> format_group_start(entry)
       :end -> format_group_end(entry)
+      :ping -> format_ping(entry)
+      :hr -> format_hr(entry)
       nil -> format_regular_entry(entry)
     end
   end
@@ -53,6 +55,23 @@ defmodule Echelon.Console.FileDisplay do
     indent = String.duplicate("  ", max(0, depth - 1))
 
     "#{indent}◀ #{name} ◀\n"
+  end
+
+  # Format ping entry for file output
+  defp format_ping(entry) do
+    depth = entry[:group_depth] || 0
+    indent = String.duplicate("  ", depth)
+    message = entry[:message] || "pong"
+
+    "#{indent}#{message}\n"
+  end
+
+  # Format horizontal rule for file output
+  defp format_hr(entry) do
+    depth = entry[:group_depth] || 0
+    indent = String.duplicate("  ", depth)
+
+    "#{indent}---\n"
   end
 
   # Format regular log entry with indentation

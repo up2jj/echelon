@@ -68,6 +68,14 @@ defmodule Echelon.Client do
       # Drop logs silently when disabled
       {:noreply, state}
     else
+      # Special handling for ping entries - determine pong vs pang
+      entry = if entry[:group_marker] == :ping do
+        response = if state.console_pid, do: "pong", else: "pang"
+        %{entry | message: response}
+      else
+        entry
+      end
+
       case state.console_pid do
         nil ->
           # Console not connected - apply fallback strategy

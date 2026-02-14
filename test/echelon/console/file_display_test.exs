@@ -476,4 +476,246 @@ defmodule Echelon.Console.FileDisplayTest do
       end)
     end
   end
+
+  describe "format_entry/1 for ping marker" do
+    test "formats pong with no indentation" do
+      entry = %{
+        level: :info,
+        message: "pong",
+        metadata: [],
+        timestamp: System.system_time(:microsecond),
+        node: :test@localhost,
+        group_depth: 0,
+        group_marker: :ping
+      }
+
+      formatted = Echelon.Console.FileDisplay.format_entry(entry)
+      assert formatted == "pong\n"
+    end
+
+    test "formats pang with no indentation" do
+      entry = %{
+        level: :info,
+        message: "pang",
+        metadata: [],
+        timestamp: System.system_time(:microsecond),
+        node: :test@localhost,
+        group_depth: 0,
+        group_marker: :ping
+      }
+
+      formatted = Echelon.Console.FileDisplay.format_entry(entry)
+      assert formatted == "pang\n"
+    end
+
+    test "formats ping with group indentation" do
+      entry = %{
+        level: :info,
+        message: "pong",
+        metadata: [],
+        timestamp: System.system_time(:microsecond),
+        node: :test@localhost,
+        group_depth: 2,
+        group_marker: :ping
+      }
+
+      formatted = Echelon.Console.FileDisplay.format_entry(entry)
+      assert formatted == "    pong\n"
+    end
+
+    test "formats ping at depth 1" do
+      entry = %{
+        level: :info,
+        message: "pong",
+        metadata: [],
+        timestamp: System.system_time(:microsecond),
+        node: :test@localhost,
+        group_depth: 1,
+        group_marker: :ping
+      }
+
+      formatted = Echelon.Console.FileDisplay.format_entry(entry)
+      assert formatted == "  pong\n"
+    end
+
+    test "formats pang at various depths" do
+      for depth <- 0..3 do
+        entry = %{
+          level: :info,
+          message: "pang",
+          metadata: [],
+          timestamp: System.system_time(:microsecond),
+          node: :test@localhost,
+          group_depth: depth,
+          group_marker: :ping
+        }
+
+        formatted = Echelon.Console.FileDisplay.format_entry(entry)
+        expected_indent = String.duplicate("  ", depth)
+        assert formatted == "#{expected_indent}pang\n"
+      end
+    end
+  end
+
+  describe "format_entry/1 for hr marker" do
+    test "formats hr with no indentation" do
+      entry = %{
+        level: :info,
+        message: "",
+        metadata: [],
+        timestamp: System.system_time(:microsecond),
+        node: :test@localhost,
+        group_depth: 0,
+        group_marker: :hr
+      }
+
+      formatted = Echelon.Console.FileDisplay.format_entry(entry)
+      assert formatted == "---\n"
+    end
+
+    test "formats hr with group indentation" do
+      entry = %{
+        level: :info,
+        message: "",
+        metadata: [],
+        timestamp: System.system_time(:microsecond),
+        node: :test@localhost,
+        group_depth: 2,
+        group_marker: :hr
+      }
+
+      formatted = Echelon.Console.FileDisplay.format_entry(entry)
+      assert formatted == "    ---\n"
+    end
+
+    test "formats hr at depth 1" do
+      entry = %{
+        level: :info,
+        message: "",
+        metadata: [],
+        timestamp: System.system_time(:microsecond),
+        node: :test@localhost,
+        group_depth: 1,
+        group_marker: :hr
+      }
+
+      formatted = Echelon.Console.FileDisplay.format_entry(entry)
+      assert formatted == "  ---\n"
+    end
+
+    test "formats hr at various depths" do
+      for depth <- 0..5 do
+        entry = %{
+          level: :info,
+          message: "",
+          metadata: [],
+          timestamp: System.system_time(:microsecond),
+          node: :test@localhost,
+          group_depth: depth,
+          group_marker: :hr
+        }
+
+        formatted = Echelon.Console.FileDisplay.format_entry(entry)
+        expected_indent = String.duplicate("  ", depth)
+        assert formatted == "#{expected_indent}---\n"
+      end
+    end
+
+    test "formats hr at depth 3" do
+      entry = %{
+        level: :info,
+        message: "",
+        metadata: [],
+        timestamp: System.system_time(:microsecond),
+        node: :test@localhost,
+        group_depth: 3,
+        group_marker: :hr
+      }
+
+      formatted = Echelon.Console.FileDisplay.format_entry(entry)
+      assert formatted == "      ---\n"
+    end
+  end
+
+  describe "format_entry/1 integration with ping and hr" do
+    test "formats sequence of entries with ping and hr" do
+      entries = [
+        %{
+          level: :info,
+          message: "Start",
+          metadata: [],
+          timestamp: 1,
+          node: :test@localhost,
+          group_depth: 0,
+          group_marker: nil
+        },
+        %{
+          level: :info,
+          message: "pong",
+          metadata: [],
+          timestamp: 2,
+          node: :test@localhost,
+          group_depth: 0,
+          group_marker: :ping
+        },
+        %{
+          level: :info,
+          message: "",
+          metadata: [],
+          timestamp: 3,
+          node: :test@localhost,
+          group_depth: 0,
+          group_marker: :hr
+        },
+        %{
+          level: :info,
+          message: "End",
+          metadata: [],
+          timestamp: 4,
+          node: :test@localhost,
+          group_depth: 0,
+          group_marker: nil
+        }
+      ]
+
+      results = Enum.map(entries, &Echelon.Console.FileDisplay.format_entry/1)
+
+      assert length(results) == 4
+      assert Enum.at(results, 0) =~ "Start"
+      assert Enum.at(results, 1) == "pong\n"
+      assert Enum.at(results, 2) == "---\n"
+      assert Enum.at(results, 3) =~ "End"
+    end
+
+    test "ping and hr do not contain ANSI codes" do
+      ping_entry = %{
+        level: :info,
+        message: "pong",
+        metadata: [],
+        timestamp: System.system_time(:microsecond),
+        node: :test@localhost,
+        group_depth: 0,
+        group_marker: :ping
+      }
+
+      hr_entry = %{
+        level: :info,
+        message: "",
+        metadata: [],
+        timestamp: System.system_time(:microsecond),
+        node: :test@localhost,
+        group_depth: 0,
+        group_marker: :hr
+      }
+
+      ping_formatted = Echelon.Console.FileDisplay.format_entry(ping_entry)
+      hr_formatted = Echelon.Console.FileDisplay.format_entry(hr_entry)
+
+      # Check for ANSI escape sequences
+      refute ping_formatted =~ "\e["
+      refute String.contains?(ping_formatted, "\e[")
+      refute hr_formatted =~ "\e["
+      refute String.contains?(hr_formatted, "\e[")
+    end
+  end
 end

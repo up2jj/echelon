@@ -27,6 +27,8 @@ defmodule Echelon.Console.TerminalDisplay do
     case entry[:group_marker] do
       :start -> show_group_start(entry)
       :end -> show_group_end(entry)
+      :ping -> show_ping(entry)
+      :hr -> show_hr(entry)
       nil -> show_regular_entry(entry)
     end
   end
@@ -70,6 +72,43 @@ defmodule Echelon.Console.TerminalDisplay do
       name,
       :magenta,
       " ◀",
+      IO.ANSI.reset()
+    ])
+
+    IO.puts(separator)
+    :ok
+  end
+
+  # Show ping response - green "pong" or red "pang"
+  defp show_ping(entry) do
+    depth = entry[:group_depth] || 0
+    indent = String.duplicate("  ", depth)
+    message = entry[:message] || "pong"
+
+    # Green for "pong" (success), red for "pang" (error)
+    color = if message == "pong", do: :green, else: :red
+
+    output = IO.ANSI.format([
+      indent,
+      color,
+      IO.ANSI.bright(),
+      message,
+      IO.ANSI.reset()
+    ])
+
+    IO.puts(output)
+    :ok
+  end
+
+  # Show horizontal rule - subtle gray separator
+  defp show_hr(entry) do
+    depth = entry[:group_depth] || 0
+    indent = String.duplicate("  ", depth)
+
+    separator = IO.ANSI.format([
+      indent,
+      :faint,
+      "---",
       IO.ANSI.reset()
     ])
 

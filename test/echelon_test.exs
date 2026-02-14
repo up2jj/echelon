@@ -355,4 +355,121 @@ defmodule EchelonTest do
       assert result == :lazy_done
     end
   end
+
+  describe "ping/0" do
+    test "returns :ok" do
+      assert Echelon.ping() == :ok
+    end
+
+    test "sends ping entry when enabled" do
+      Echelon.on()
+      assert Echelon.ping() == :ok
+      assert Echelon.ping() == :ok
+      assert Echelon.ping() == :ok
+    end
+
+    test "is dropped when logging is disabled" do
+      Echelon.off()
+      assert Echelon.ping() == :ok
+      Echelon.on()  # Cleanup
+    end
+
+    test "respects group context" do
+      result = Echelon.group("test_group", fn ->
+        Echelon.ping()
+        :test_result
+      end)
+
+      assert result == :test_result
+    end
+
+    test "works in nested groups" do
+      result = Echelon.group("outer", fn ->
+        Echelon.ping()
+
+        Echelon.group("inner", fn ->
+          Echelon.ping()
+          :nested_result
+        end)
+      end)
+
+      assert result == :nested_result
+    end
+  end
+
+  describe "hr/0" do
+    test "returns :ok" do
+      assert Echelon.hr() == :ok
+    end
+
+    test "sends hr entry when enabled" do
+      Echelon.on()
+      assert Echelon.hr() == :ok
+    end
+
+    test "is dropped when logging is disabled" do
+      Echelon.off()
+      assert Echelon.hr() == :ok
+      Echelon.on()  # Cleanup
+    end
+
+    test "respects group context" do
+      result = Echelon.group("test_group", fn ->
+        Echelon.info("Before separator")
+        Echelon.hr()
+        Echelon.info("After separator")
+        :test_result
+      end)
+
+      assert result == :test_result
+    end
+
+    test "multiple hrs in sequence" do
+      assert Echelon.hr() == :ok
+      assert Echelon.hr() == :ok
+      assert Echelon.hr() == :ok
+    end
+
+    test "hr between different log levels" do
+      Echelon.debug("Debug message")
+      Echelon.hr()
+      Echelon.info("Info message")
+      Echelon.hr()
+      Echelon.warn("Warning message")
+      Echelon.hr()
+      Echelon.error("Error message")
+
+      assert :ok == :ok
+    end
+  end
+
+  describe "ping and hr integration" do
+    test "ping and hr work together" do
+      Echelon.ping()
+      Echelon.hr()
+      Echelon.info("Test message")
+      Echelon.hr()
+      Echelon.ping()
+
+      assert :ok == :ok
+    end
+
+    test "ping and hr in nested groups" do
+      Echelon.group("outer", fn ->
+        Echelon.ping()
+        Echelon.hr()
+
+        Echelon.group("inner", fn ->
+          Echelon.ping()
+          Echelon.hr()
+          Echelon.info("Nested message")
+        end)
+
+        Echelon.hr()
+        Echelon.ping()
+      end)
+
+      assert :ok == :ok
+    end
+  end
 end
