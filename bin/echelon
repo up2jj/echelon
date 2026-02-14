@@ -1,0 +1,5 @@
+#!/bin/sh
+# Echelon Console launcher script
+
+cd "$(dirname "$0")/.." || exit 1
+exec iex --sname echelon -S mix
