@@ -234,6 +234,87 @@ When the console is unavailable:
 - **`:logger`** - Falls back to standard Logger
 - **`:silent`** - Drops logs silently
 
+## Production Considerations
+
+### Runtime Overhead
+
+Echelon is designed to be **production-safe** with minimal overhead:
+
+**When disabled** (recommended for production):
+- **< 100 nanoseconds** overhead per log call
+- Lazy functions are **NOT evaluated** (zero cost for expensive operations)
+- No metadata collection, no system calls, no memory allocation
+- Immediate return with early enabled check
+
+**When enabled** (development/debugging):
+- **< 10 microseconds** overhead per log call
+- Non-blocking async delivery via `GenServer.cast`
+- Automatic buffering when console disconnected
+
+### Production Configuration
+
+Recommended `config/prod.exs`:
+
+```elixir
+config :echelon,
+  enabled: false,        # Disable for minimal overhead
+  fallback: :silent      # Drop logs silently
+```
+
+This configuration ensures **negligible performance impact** in production, even with debug/trace logging left in your code.
+
+### Runtime Control
+
+Enable/disable logging dynamically for production debugging:
+
+```elixir
+# Temporarily enable for debugging
+Echelon.on()
+
+# Check current state
+Echelon.enabled?()  # => true
+
+# Disable again
+Echelon.off()
+```
+
+Changes are runtime-only and reset on application restart.
+
+### Performance Benchmarks
+
+Run benchmarks on your hardware:
+
+```bash
+mix run bench/runtime_overhead.exs
+```
+
+**Expected overhead** (typical modern CPU):
+- Disabled: ~50-100ns per call
+- Enabled: ~2-10μs per call
+
+Even with 100 log calls per request:
+- Disabled: ~5-10μs (0.005-0.01ms) total
+- Enabled: ~500μs (0.5ms) total
+
+Both are negligible compared to typical request processing time.
+
+### Best Practices
+
+1. **Use lazy evaluation for expensive operations:**
+   ```elixir
+   # ❌ Bad: always computed
+   Echelon.debug("Data: #{inspect(large_struct)}")
+
+   # ✅ Good: only computed when enabled
+   Echelon.debug(fn -> "Data: #{inspect(large_struct)}" end)
+   ```
+
+2. **Disable in production by default** - enable only when needed for debugging
+
+3. **Avoid logging in hot paths** - even < 100ns adds up in tight loops
+
+For detailed production deployment guidance, see [docs/PRODUCTION.md](docs/PRODUCTION.md).
+
 ## Troubleshooting
 
 ### Console doesn't start

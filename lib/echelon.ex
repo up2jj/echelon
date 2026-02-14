@@ -289,30 +289,35 @@ defmodule Echelon do
 
   # Private implementation
   defp log(level, message, metadata) do
-    # Evaluate lazy messages
-    message = if is_function(message, 0), do: message.(), else: message
+    # Early return if logging is disabled - avoids all metadata collection overhead
+    unless Application.get_env(:echelon, :enabled, true) do
+      :ok
+    else
+      # Evaluate lazy messages
+      message = if is_function(message, 0), do: message.(), else: message
 
-    # Get current group state
-    stack = Process.get(:echelon_group_stack, [])
-    group_depth = length(stack)
-    group_name = List.last(stack)
+      # Get current group state
+      stack = Process.get(:echelon_group_stack, [])
+      group_depth = length(stack)
+      group_name = List.last(stack)
 
-    # Build log entry
-    entry = %{
-      level: level,
-      message: message,
-      metadata: metadata,
-      timestamp: System.system_time(:microsecond),
-      node: node(),
-      pid: self(),
-      app: get_app(),
-      group_depth: group_depth,
-      group_name: group_name,
-      group_marker: nil
-    }
+      # Build log entry
+      entry = %{
+        level: level,
+        message: message,
+        metadata: metadata,
+        timestamp: System.system_time(:microsecond),
+        node: node(),
+        pid: self(),
+        app: get_app(),
+        group_depth: group_depth,
+        group_name: group_name,
+        group_marker: nil
+      }
 
-    # Send to client
-    Echelon.Client.send_log(entry)
+      # Send to client
+      Echelon.Client.send_log(entry)
+    end
   end
 
   # Send a group marker entry (start or end)

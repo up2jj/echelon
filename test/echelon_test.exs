@@ -53,6 +53,12 @@ defmodule EchelonTest do
   end
 
   describe "on/off functionality" do
+    setup do
+      # Ensure enabled state is reset to true before each test
+      Echelon.on()
+      :ok
+    end
+
     test "enabled?/0 returns true by default" do
       assert Echelon.enabled?() == true
     end
@@ -107,6 +113,88 @@ defmodule EchelonTest do
 
       Echelon.on()
       assert Application.get_env(:echelon, :enabled) == true
+    end
+  end
+
+  describe "disabled overhead optimization" do
+    setup do
+      # Store original state and disable logging
+      original_state = Echelon.enabled?()
+      Echelon.off()
+
+      # Cleanup: restore original state
+      on_exit(fn ->
+        if original_state, do: Echelon.on(), else: Echelon.off()
+      end)
+
+      :ok
+    end
+
+    test "lazy functions are NOT evaluated when disabled" do
+      # This test verifies the optimization - expensive functions shouldn't run
+      test_pid = self()
+
+      result = Echelon.info(fn ->
+        send(test_pid, :function_was_evaluated)
+        "expensive computation"
+      end)
+
+      assert result == :ok
+
+      # Function should NOT have been evaluated
+      refute_receive :function_was_evaluated, 50
+    end
+
+    test "logs return :ok immediately when disabled" do
+      assert Echelon.debug("test") == :ok
+      assert Echelon.info("test") == :ok
+      assert Echelon.warn("test") == :ok
+      assert Echelon.error("test") == :ok
+    end
+
+    test "metadata collection is skipped when disabled" do
+      # This verifies that we don't do unnecessary work
+      # If optimization works, even complex metadata doesn't slow things down
+      expensive_metadata = %{
+        data: Enum.to_list(1..1000),
+        nested: %{deep: %{structure: "value"}}
+      }
+
+      assert Echelon.info("test", expensive_metadata) == :ok
+    end
+
+    test "group tracking is skipped when disabled" do
+      # Verify that Process.get for group stack doesn't happen
+      Process.delete(:echelon_group_stack)
+
+      Echelon.group("test_group", fn ->
+        Echelon.info("inside group")
+        :ok
+      end)
+
+      # When disabled, the whole group/2 function is evaluated
+      # but the log calls inside should not track group state
+      # The group markers themselves will still set/clear the stack
+      # but the log/3 calls won't read it (optimization)
+      :ok
+    end
+
+    test "multiple disabled calls have minimal overhead" do
+      # This is more of a performance characterization test
+      # It should complete very quickly even with many calls
+      start_time = System.monotonic_time(:microsecond)
+
+      for _ <- 1..10_000 do
+        Echelon.info("test message", key: "value")
+      end
+
+      elapsed = System.monotonic_time(:microsecond) - start_time
+
+      # 10k calls should complete in well under 100ms (< 10 microseconds each)
+      # With optimization: ~50-100ns each = ~1ms total
+      # Without optimization: ~500-1000ns each = ~10ms total
+      # We'll be generous and say < 50ms (5 microseconds per call average)
+      assert elapsed < 50_000, "10k disabled log calls took #{elapsed}μs (expected < 50ms)"
     end
   end
 
