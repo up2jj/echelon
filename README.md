@@ -14,8 +14,6 @@ Zero-touch log filtering for Elixir applications with integrated console. Keep y
   - [Lazy Evaluation](#lazy-evaluation)
   - [Grouping Related Logs](#grouping-related-logs)
   - [Benchmarking Functions](#benchmarking-functions)
-  - [Running the Console](#running-the-console)
-  - [What You'll See](#what-youll-see)
   - [Color Scheme](#color-scheme)
 - [Configuration (Optional)](#configuration-optional)
   - [Fallback Strategies](#fallback-strategies)
@@ -64,22 +62,74 @@ Echelon provides a Logger-like API that sends filtered log messages to an integr
 
 ## Installation
 
-Add `echelon` to your `mix.exs` dependencies:
+### 1. Add the dependency
 
 ```elixir
 def deps do
   [
-    {:echelon, path: "../echelon"}  # For local development
+    {:echelon, "~> 0.1"}
   ]
 end
 ```
 
-Run:
 ```bash
 mix deps.get
 ```
 
-That's it! No configuration needed.
+### 2. Start your application as a distributed node
+
+Echelon uses Erlang distribution to connect client and console. Start your app with a node name:
+
+```bash
+iex --sname my_app -S mix
+# or for Phoenix:
+iex --sname my_app -S mix phx.server
+```
+
+Any short name works — only the console node must be named exactly `echelon`.
+
+### 3. Start the Echelon console (separate terminal)
+
+```bash
+cd /path/to/echelon
+iex --sname echelon -S mix
+# or use the launcher:
+./bin/echelon
+```
+
+The console node **must be named `echelon`**. This is how Echelon distinguishes the monitoring console from client applications.
+
+### 4. Auto-connect
+
+Once both nodes are running, the client discovers the console automatically within a few seconds — no manual `Node.connect` needed. Logs buffered before the connection was established are flushed automatically.
+
+> **Cookie:** Both sides use `:echelon` by default. If your environment requires a different cookie, set `config :echelon, cookie: :your_cookie` in both apps.
+
+**Your app terminal** stays clean:
+```
+iex(my_app@localhost)1> MyApp.process_request()
+:ok
+```
+
+**Echelon console terminal** receives the filtered logs:
+```
+✓ Echelon started on node: echelon@localhost
+🔍 Echelon Console Ready
+Waiting for log entries from connected applications...
+
+[15:32:01.234] INFO  my_app User logged in
+  user_id: 123
+  email: "user@example.com"
+
+[15:32:05.789] WARN  my_app Slow query detected
+  query: "SELECT * FROM large_table"
+  duration_ms: 1250
+
+[15:32:10.123] INFO  my_app Request completed
+  user: %{id: 123, role: :admin, name: "Alice"}
+  request: %{method: "POST", path: "/api/users", duration_ms: 45}
+  metrics: %{db_queries: 3, cache_hits: 12}
+```
 
 ## Usage
 
@@ -246,58 +296,6 @@ end)
 - `elapsed_us` / `elapsed_ms` — wall-clock execution time
 - `memory_delta_bytes` — process heap change (can be negative if GC ran)
 - `reductions` — Erlang work units, useful for comparing algorithmic cost
-
-### Running the Console
-
-**Using IEx (recommended):**
-```bash
-cd /path/to/echelon
-iex --sname echelon -S mix
-```
-
-**Using the launcher script:**
-```bash
-cd /path/to/echelon
-./bin/echelon
-```
-
-**⚠️ Important:** The node name **must be `echelon`** for the console to start. This prevents conflicts when multiple apps include Echelon as a dependency - only the node named `echelon` will run the console server, while other nodes act as clients only.
-
-In your app terminal, start with any node name:
-
-```bash
-iex --sname my_app -S mix phx.server
-```
-
-The console will automatically discover and connect to your application(s).
-
-### What You'll See
-
-**Your App IEx Console** (clean, only Logger output):
-```
-iex(1)> MyApp.process_request()
-:ok
-```
-
-**Echelon Console** (filtered Echelon logs):
-```
-✓ Echelon started on node: echelon@localhost
-🔍 Echelon Console Ready
-Waiting for log entries from connected applications...
-
-[15:32:01.234] INFO  my_app User logged in
-  user_id: 123
-  email: "user@example.com"
-
-[15:32:05.789] WARN  my_app Slow query detected
-  query: "SELECT * FROM large_table"
-  duration_ms: 1250
-
-[15:32:10.123] INFO  my_app Request completed
-  user: %{id: 123, role: :admin, name: "Alice"}
-  request: %{method: "POST", path: "/api/users", duration_ms: 45}
-  metrics: %{db_queries: 3, cache_hits: 12}
-```
 
 ### Color Scheme
 
