@@ -2,6 +2,41 @@
 
 Zero-touch log filtering for Elixir applications with integrated console. Keep your IEx console clean while preserving important debugging output in a dedicated monitoring console.
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Features](#features)
+  - [Client Features](#client-features)
+  - [Console Features](#console-features)
+- [Installation](#installation)
+- [Usage](#usage)
+  - [Basic Logging (Client API)](#basic-logging-client-api)
+  - [Lazy Evaluation](#lazy-evaluation)
+  - [Grouping Related Logs](#grouping-related-logs)
+  - [Benchmarking Functions](#benchmarking-functions)
+  - [Running the Console](#running-the-console)
+  - [What You'll See](#what-youll-see)
+  - [Color Scheme](#color-scheme)
+- [Configuration (Optional)](#configuration-optional)
+  - [Fallback Strategies](#fallback-strategies)
+- [Custom Handlers](#custom-handlers)
+  - [Configuration](#configuration-1)
+  - [Creating a Custom Handler](#creating-a-custom-handler)
+  - [Handler Lifecycle](#handler-lifecycle)
+  - [Runtime Handler Management](#runtime-handler-management)
+  - [Log Entry Structure](#log-entry-structure)
+  - [Example Handlers](#example-handlers)
+- [Production Considerations](#production-considerations)
+  - [Runtime Overhead](#runtime-overhead)
+  - [Production Configuration](#production-configuration)
+  - [Runtime Control](#runtime-control)
+  - [Performance Benchmarks](#performance-benchmarks)
+  - [Best Practices](#best-practices)
+- [Troubleshooting](#troubleshooting)
+  - [Console doesn't start](#console-doesnt-start)
+  - [Logs not appearing in console](#logs-not-appearing-in-console)
+- [License](#license)
+
 ## Overview
 
 Echelon provides a Logger-like API that sends filtered log messages to an integrated console. This solves the "console pollution" problem during development - your main IEx console shows only regular Logger output, while Echelon logs appear in a dedicated monitoring console.
