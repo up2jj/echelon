@@ -191,6 +191,8 @@ true
 
 **Warning:** Runtime changes are not persisted and will reset on application restart.
 
+**Performance:** `on/0`, `off/0`, and `enabled?/0` are direct `Application` env reads/writes (ETS). They do not go through a GenServer, so they are safe to call from any process without scheduler contention.
+
 ## Performance Guarantees
 
 ### Production Runtime Guarantees

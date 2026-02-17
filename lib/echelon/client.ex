@@ -28,21 +28,21 @@ defmodule Echelon.Client do
   Enables logging. Returns :ok.
   """
   def enable do
-    GenServer.call(__MODULE__, :enable)
+    Application.put_env(:echelon, :enabled, true)
   end
 
   @doc """
   Disables logging. Returns :ok.
   """
   def disable do
-    GenServer.call(__MODULE__, :disable)
+    Application.put_env(:echelon, :enabled, false)
   end
 
   @doc """
   Returns whether logging is currently enabled.
   """
   def enabled? do
-    GenServer.call(__MODULE__, :enabled?)
+    Application.get_env(:echelon, :enabled, true)
   end
 
   ## Server Callbacks
@@ -87,24 +87,6 @@ defmodule Echelon.Client do
           {:noreply, state}
       end
     end
-  end
-
-  @impl true
-  def handle_call(:enable, _from, state) do
-    Application.put_env(:echelon, :enabled, true)
-    {:reply, :ok, state}
-  end
-
-  @impl true
-  def handle_call(:disable, _from, state) do
-    Application.put_env(:echelon, :enabled, false)
-    {:reply, :ok, state}
-  end
-
-  @impl true
-  def handle_call(:enabled?, _from, state) do
-    enabled = Application.get_env(:echelon, :enabled, true)
-    {:reply, enabled, state}
   end
 
   @impl true
