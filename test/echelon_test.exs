@@ -472,4 +472,89 @@ defmodule EchelonTest do
       assert :ok == :ok
     end
   end
+
+  describe "bench/1 and bench/2" do
+    test "bench/1 returns the function's return value" do
+      assert Echelon.bench(fn -> 42 end) == 42
+    end
+
+    test "bench/2 returns the function's return value" do
+      assert Echelon.bench("label", fn -> :hello end) == :hello
+    end
+
+    test "bench/1 returns nil when function returns nil" do
+      assert Echelon.bench(fn -> nil end) == nil
+    end
+
+    test "bench/2 returns complex values" do
+      assert Echelon.bench("map", fn -> %{a: 1, b: [2, 3]} end) == %{a: 1, b: [2, 3]}
+    end
+
+    test "bench/1 executes the function" do
+      test_pid = self()
+      Echelon.bench(fn -> send(test_pid, :executed) end)
+      assert_receive :executed
+    end
+
+    test "bench/2 executes the function" do
+      test_pid = self()
+      Echelon.bench("exec_test", fn -> send(test_pid, :executed) end)
+      assert_receive :executed
+    end
+
+    test "bench/1 reraises exceptions" do
+      assert_raise RuntimeError, "boom", fn ->
+        Echelon.bench(fn -> raise "boom" end)
+      end
+    end
+
+    test "bench/2 reraises exceptions" do
+      assert_raise ArgumentError, "bad input", fn ->
+        Echelon.bench("risky", fn -> raise ArgumentError, "bad input" end)
+      end
+    end
+
+    test "bench/2 preserves exception type" do
+      assert_raise KeyError, fn ->
+        Echelon.bench("key_error", fn -> Map.fetch!(%{}, :missing) end)
+      end
+    end
+
+    test "bench/1 rethrows thrown values" do
+      assert catch_throw(Echelon.bench(fn -> throw(:abort) end)) == :abort
+    end
+
+    test "bench/2 rethrows thrown values" do
+      assert catch_throw(Echelon.bench("throw_test", fn -> throw({:error, :reason}) end)) ==
+               {:error, :reason}
+    end
+
+    test "bench/2 preserves original stacktrace on exception" do
+      stacktrace =
+        try do
+          Echelon.bench("st_test", fn -> raise "trace_me" end)
+        rescue
+          RuntimeError -> __STACKTRACE__
+        end
+
+      [{module, _fun, _arity, location} | _] = stacktrace
+      assert module == EchelonTest
+      assert to_string(location[:file]) =~ "echelon_test.exs"
+    end
+
+    test "bench/2 works inside a group" do
+      result =
+        Echelon.group("benchmarked_group", fn ->
+          Echelon.bench("inner", fn -> :inner_result end)
+        end)
+
+      assert result == :inner_result
+    end
+
+    test "bench works when logging is disabled" do
+      Echelon.off()
+      assert Echelon.bench(fn -> :still_runs end) == :still_runs
+      Echelon.on()
+    end
+  end
 end

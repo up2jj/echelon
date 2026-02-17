@@ -128,4 +128,43 @@ defmodule Echelon.HelpersTest do
       eon()  # Cleanup
     end
   end
+
+  describe "ebench/1 and ebench/2" do
+    test "ebench/1 returns the function's return value" do
+      assert ebench(fn -> 42 end) == 42
+    end
+
+    test "ebench/2 returns the function's return value" do
+      assert ebench("label", fn -> :hello end) == :hello
+    end
+
+    test "ebench/1 reraises exceptions" do
+      assert_raise RuntimeError, "boom", fn ->
+        ebench(fn -> raise "boom" end)
+      end
+    end
+
+    test "ebench/2 reraises exceptions" do
+      assert_raise RuntimeError, "boom", fn ->
+        ebench("labeled", fn -> raise "boom" end)
+      end
+    end
+
+    test "ebench/1 rethrows thrown values" do
+      assert catch_throw(ebench(fn -> throw(:abort) end)) == :abort
+    end
+
+    test "ebench/2 rethrows thrown values" do
+      assert catch_throw(ebench("throw_test", fn -> throw(:stop) end)) == :stop
+    end
+
+    test "ebench/2 works inside egroup" do
+      result =
+        egroup("bench_group", fn ->
+          ebench("inner", fn -> :done end)
+        end)
+
+      assert result == :done
+    end
+  end
 end

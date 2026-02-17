@@ -230,6 +230,96 @@ defmodule Echelon do
   end
 
   @doc """
+  Benchmarks a function and logs timing, memory, and reduction metrics at debug level.
+
+  Executes `fun`, measures its execution time, process memory delta, and Erlang
+  reduction count, then logs the results. Returns the function's return value unchanged.
+
+  This is equivalent to `bench("bench", fun)`.
+
+  If an exception is raised, it is logged via `error/2` and reraised.
+  If a value is thrown, it is logged via `error/2` and rethrown.
+
+  ## Examples
+
+      result = Echelon.bench(fn -> Enum.sort(Enum.to_list(1..10_000)) end)
+      # Logs: bench: bench  elapsed_us: 1234, elapsed_ms: 1.23, memory_delta_bytes: 80312, reductions: 30001
+      # result == [1, 2, ..., 10_000]
+
+  """
+  @spec bench((() -> result)) :: result when result: any()
+  def bench(fun) when is_function(fun, 0) do
+    bench("bench", fun)
+  end
+
+  @doc """
+  Benchmarks a labeled function and logs timing, memory, and reduction metrics at debug level.
+
+  Executes `fun`, measures its execution time, process memory delta, and Erlang
+  reduction count, then logs the results under `label`. Returns the function's
+  return value unchanged.
+
+  If an exception is raised, it is logged via `error/2` and reraised with the
+  original stacktrace. If a value is thrown, it is logged via `error/2` and rethrown.
+
+  ## Examples
+
+      result = Echelon.bench("sort_users", fn ->
+        users |> Enum.sort_by(& &1.name)
+      end)
+      # Logs: bench: sort_users  elapsed_us: 312, elapsed_ms: 0.31, memory_delta_bytes: 4096, reductions: 8001
+
+      Echelon.bench("risky_op", fn -> raise ArgumentError, "bad input" end)
+      # Logs error, then raises ArgumentError
+
+  """
+  @spec bench(String.t(), (() -> result)) :: result when result: any()
+  def bench(label, fun) when is_binary(label) and is_function(fun, 0) do
+    {:memory, mem_before}     = :erlang.process_info(self(), :memory)
+    {:reductions, red_before} = :erlang.process_info(self(), :reductions)
+    start_us = System.monotonic_time(:microsecond)
+
+    try do
+      result = fun.()
+
+      elapsed_us = System.monotonic_time(:microsecond) - start_us
+      {:memory, mem_after}     = :erlang.process_info(self(), :memory)
+      {:reductions, red_after} = :erlang.process_info(self(), :reductions)
+
+      debug("bench: #{label}", [
+        elapsed_us: elapsed_us,
+        elapsed_ms: Float.round(elapsed_us / 1000, 2),
+        memory_delta_bytes: mem_after - mem_before,
+        reductions: red_after - red_before
+      ])
+
+      result
+    rescue
+      exception ->
+        elapsed_us = System.monotonic_time(:microsecond) - start_us
+
+        error("bench: #{label} raised #{inspect(exception.__struct__)}", [
+          elapsed_us: elapsed_us,
+          elapsed_ms: Float.round(elapsed_us / 1000, 2),
+          exception: Exception.message(exception)
+        ])
+
+        reraise exception, __STACKTRACE__
+    catch
+      :throw, value ->
+        elapsed_us = System.monotonic_time(:microsecond) - start_us
+
+        error("bench: #{label} threw #{inspect(value)}", [
+          elapsed_us: elapsed_us,
+          elapsed_ms: Float.round(elapsed_us / 1000, 2),
+          exception: inspect(value)
+        ])
+
+        throw(value)
+    end
+  end
+
+  @doc """
   Enables Echelon logging.
 
   When enabled, log entries will be sent to the Echelon console (if connected)

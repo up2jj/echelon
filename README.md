@@ -15,6 +15,7 @@ Echelon provides a Logger-like API that sends filtered log messages to an integr
 ### Client Features
 - ✅ **Zero Configuration** - Just add the dependency
 - ✅ **Logger-like API** - Familiar `debug/info/warn/error` functions
+- ✅ **Benchmarking** - Measure and log execution time, memory, and reductions with `bench/2`
 - ✅ **Auto-Discovery** - Automatically finds and connects to console
 - ✅ **Smart Buffering** - Buffers logs when console is disconnected
 - ✅ **Graceful Fallback** - Configurable behavior when console unavailable
@@ -153,6 +154,63 @@ end)
 ```
 
 If an exception occurs, the group is properly closed before the exception propagates.
+
+### Benchmarking Functions
+
+Wrap any zero-arity function to measure and log its execution time, process memory delta, and Erlang reduction count:
+
+```elixir
+result = Echelon.bench("sort_users", fn ->
+  users |> Enum.sort_by(& &1.name)
+end)
+# result == [sorted users list]
+```
+
+**Output:**
+```
+[15:32:01.234] DEBUG my_app bench: sort_users
+  elapsed_us: 312
+  elapsed_ms: 0.31
+  memory_delta_bytes: 4096
+  reductions: 8001
+```
+
+The unlabeled form uses `"bench"` as the default label:
+
+```elixir
+Echelon.bench(fn -> expensive_operation() end)
+```
+
+**Return value is preserved** — `bench` is transparent to the caller:
+
+```elixir
+sorted = Echelon.bench("sort", fn -> Enum.sort(list) end)
+# sorted == sorted list, bench result discarded
+```
+
+**Exception handling** — if the function raises, the error is logged and the exception is reraised with its original stacktrace:
+
+```elixir
+Echelon.bench("risky_op", fn -> raise ArgumentError, "bad input" end)
+# Logs: ERROR bench: risky_op raised ArgumentError
+#         elapsed_us: 23, elapsed_ms: 0.02, exception: "bad input"
+# Then raises ArgumentError with original stacktrace
+```
+
+**Composing with groups:**
+
+```elixir
+Echelon.group("data_pipeline", fn ->
+  parsed  = Echelon.bench("parse",     fn -> parse_csv(raw) end)
+  records = Echelon.bench("transform", fn -> transform(parsed) end)
+  Echelon.bench("insert",    fn -> insert_all(records) end)
+end)
+```
+
+**Metrics explained:**
+- `elapsed_us` / `elapsed_ms` — wall-clock execution time
+- `memory_delta_bytes` — process heap change (can be negative if GC ran)
+- `reductions` — Erlang work units, useful for comparing algorithmic cost
 
 ### Running the Console
 

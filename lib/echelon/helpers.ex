@@ -181,4 +181,24 @@ defmodule Echelon.Helpers do
   def egroup(name, func) do
     Echelon.group(name, func)
   end
+
+  @doc """
+  Benchmarks a function and logs timing, memory, and reduction metrics at debug level.
+
+  Convenience wrapper for `Echelon.bench/1`.
+  """
+  @spec ebench((() -> result)) :: result when result: any()
+  def ebench(fun) when is_function(fun, 0) do
+    Echelon.bench(fun)
+  end
+
+  @doc """
+  Benchmarks a labeled function and logs timing, memory, and reduction metrics at debug level.
+
+  Convenience wrapper for `Echelon.bench/2`.
+  """
+  @spec ebench(String.t(), (() -> result)) :: result when result: any()
+  def ebench(label, fun) when is_binary(label) and is_function(fun, 0) do
+    Echelon.bench(label, fun)
+  end
 end
